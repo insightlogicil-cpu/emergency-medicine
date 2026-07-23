@@ -134,6 +134,14 @@ mark{background:#fff3bf;padding:0 2px;border-radius:3px}
 .wmini.rec{background:var(--red);color:#fff}
 .wlisten{text-align:center;font-size:12.5px;color:var(--mut);min-height:16px}
 .wlisten b{color:var(--red)}
+
+.imgpane img{cursor:zoom-in}
+#lb{position:fixed;inset:0;background:rgba(14,17,21,.97);z-index:200;display:none;touch-action:none;overflow:hidden}
+#lb.open{display:block}
+#lb img{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;-webkit-user-select:none;user-select:none;-webkit-user-drag:none;pointer-events:none}
+#lbBar{position:fixed;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:201;background:linear-gradient(rgba(0,0,0,.5),transparent)}
+#lbBar .lbbtn{width:44px;height:44px;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+#lbHint{position:fixed;bottom:18px;left:0;right:0;text-align:center;color:rgba(255,255,255,.72);font-size:13px;z-index:201;pointer-events:none;transition:opacity .4s}
 </style>
 </head>
 <body>
@@ -307,7 +315,7 @@ function showTab(t){
  const b=document.getElementById('vbody');
  if(t==='img'){
   let h='<div class="imgpane">'+(protoHasFlow(cur)?schemaBanner():''),any=false;
-  for(let pg=cur.page;pg<=cur.endPage;pg++){if(PAGES[book]&&PAGES[book].indexOf(pg)>=0){any=true;h+=`<img loading="lazy" src="${book}_${String(pg).padStart(3,'0')}.webp" onerror="this.style.display='none'"><div class="plabel">עמוד ${pg}</div>`;}}
+  for(let pg=cur.page;pg<=cur.endPage;pg++){if(PAGES[book]&&PAGES[book].indexOf(pg)>=0){any=true;h+=`<img loading="lazy" src="${book}_${String(pg).padStart(3,'0')}.webp" onerror="this.style.display='none'" onclick="lbOpen(this.src)"><div class="plabel">עמוד ${pg}</div>`;}}
   if(!any)h+='<div class="note" style="background:#fff;color:var(--mut);text-align:center;margin:14px">תמונת עמוד המקור זמינה לפרוטוקולים עם סכמה. עבור לטאב 📝 טקסט לתוכן המלא.</div>';
   h+='</div>';b.innerHTML=h;
  } else if(t==='txt'){
@@ -412,7 +420,7 @@ function renderNode(speakIt){
  let rlist='';
  if(n.type==='decision'&&n.branches)rlist='<div class="rlist">'+n.branches.map(b=>`<div class="r"><b>${escapeHtml(b.label)}:</b><span>${escapeHtml(b.desc||('מסלול '+b.label))}</span></div>`).join('')+'</div>';
  const pg=walk.proto.page; const hasImg=PAGES[book]&&PAGES[book].indexOf(pg)>=0;
- document.getElementById('wBody').innerHTML=`<div class="stepcard t_${n.type}"><div class="kind">${KICON[n.type]||'▸'} ${KIND[n.type]||''}${n.type==='decision'?' — בחר מסלול':''}</div><div class="maintext">${escapeHtml(n.text)}</div>${rlist}</div><details class="wsrc"><summary>📄 הצג עמוד מקור לאימות</summary>${hasImg?`<img src="${book}_${String(pg).padStart(3,'0')}.webp"><div class="cap">מקור: עמ' ${pg}</div>`:'<div class="cap">אין תמונת מקור</div>'}</details>`;
+ document.getElementById('wBody').innerHTML=`<div class="stepcard t_${n.type}"><div class="kind">${KICON[n.type]||'▸'} ${KIND[n.type]||''}${n.type==='decision'?' — בחר מסלול':''}</div><div class="maintext">${escapeHtml(n.text)}</div>${rlist}</div><details class="wsrc"><summary>📄 הצג עמוד מקור לאימות</summary>${hasImg?`<img src="${book}_${String(pg).padStart(3,'0')}.webp" onclick="lbOpen(this.src)" style="cursor:zoom-in"><div class="cap">מקור: עמ' ${pg}</div>`:'<div class="cap">אין תמונת מקור</div>'}</details>`;
  document.getElementById('wBody').scrollTop=0;renderControls(n);document.getElementById('wListen').textContent='';
  if(speakIt)speakNode(n);
 }
@@ -465,6 +473,45 @@ if('speechSynthesis'in window){window.speechSynthesis.getVoices();window.speechS
 setBook(book);setMode(mode);
 document.getElementById('rateBtn').innerHTML=rate.toFixed(1)+'×<span style="font-size:9px;opacity:.7">מהירות</span>';
 renderHome();
+
+/* ===== Source-page lightbox: reliable pinch/double-tap/drag zoom ===== */
+(function(){
+ var lb,img,scale=1,tx=0,ty=0,natW=0,natH=0,minS=1,pinch=null,pan=null,mdrag=null,lastTap=0,hintT=null;
+ function ensure(){
+  if(lb)return;
+  lb=document.createElement('div');lb.id='lb';
+  lb.innerHTML='<div id="lbBar"><button class="lbbtn" id="lbClose" aria-label="סגור">×</button><div style="display:flex;gap:10px"><button class="lbbtn" id="lbOut">−</button><button class="lbbtn" id="lbIn">+</button></div></div><img id="lbImg" alt=""><div id="lbHint">צביטה או הקשה כפולה להגדלה • גרירה להזזה</div>';
+  document.body.appendChild(lb);
+  img=lb.querySelector('#lbImg');
+  lb.querySelector('#lbClose').onclick=close;
+  lb.querySelector('#lbIn').onclick=function(){zoomAt(innerWidth/2,innerHeight/2,1.6);};
+  lb.querySelector('#lbOut').onclick=function(){zoomAt(innerWidth/2,innerHeight/2,1/1.6);};
+  img.onload=function(){natW=img.naturalWidth;natH=img.naturalHeight;fit();};
+  lb.addEventListener('touchstart',ts,{passive:false});
+  lb.addEventListener('touchmove',tm,{passive:false});
+  lb.addEventListener('touchend',te,{passive:false});
+  lb.addEventListener('wheel',wheel,{passive:false});
+  lb.addEventListener('mousedown',md);window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);
+  window.addEventListener('resize',function(){if(lb&&lb.classList.contains('open')&&natW){fit();}});
+ }
+ function fit(){minS=Math.min(innerWidth/natW,innerHeight/natH);if(!isFinite(minS)||minS<=0)minS=1;scale=minS;tx=(innerWidth-natW*scale)/2;ty=(innerHeight-natH*scale)/2;apply();}
+ function apply(){img.style.width=natW+'px';img.style.height=natH+'px';img.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';}
+ function clamp(){var maxS=minS*6;if(scale<minS)scale=minS;if(scale>maxS)scale=maxS;var w=natW*scale,h=natH*scale;if(w<=innerWidth)tx=(innerWidth-w)/2;else tx=Math.min(0,Math.max(innerWidth-w,tx));if(h<=innerHeight)ty=(innerHeight-h)/2;else ty=Math.min(0,Math.max(innerHeight-h,ty));}
+ function zoomAt(cx,cy,f){var ns=Math.max(minS,Math.min(minS*6,scale*f)),k=ns/scale;tx=cx-(cx-tx)*k;ty=cy-(cy-ty)*k;scale=ns;clamp();apply();}
+ function dist(t){return Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);}
+ function mid(t){return{x:(t[0].clientX+t[1].clientX)/2,y:(t[0].clientY+t[1].clientY)/2};}
+ function ts(e){if(e.target.closest('#lbBar'))return;e.preventDefault();if(e.touches.length===2){pinch={d:dist(e.touches),s:scale,m:mid(e.touches),tx:tx,ty:ty};pan=null;}else if(e.touches.length===1){var now=Date.now();if(now-lastTap<300){var t=e.touches[0];if(scale>minS*1.2){fit();}else{zoomAt(t.clientX,t.clientY,2.6);}lastTap=0;return;}lastTap=now;pan={x:e.touches[0].clientX-tx,y:e.touches[0].clientY-ty};}}
+ function tm(e){if(e.target.closest('#lbBar'))return;e.preventDefault();if(pinch&&e.touches.length===2){var nd=dist(e.touches),k=nd/pinch.d;scale=pinch.s*k;tx=pinch.m.x-(pinch.m.x-pinch.tx)*k;ty=pinch.m.y-(pinch.m.y-pinch.ty)*k;clamp();apply();}else if(pan&&e.touches.length===1){tx=e.touches[0].clientX-pan.x;ty=e.touches[0].clientY-pan.y;clamp();apply();}}
+ function te(e){if(e.touches.length===0){pinch=null;pan=null;}else if(e.touches.length===1){pinch=null;pan={x:e.touches[0].clientX-tx,y:e.touches[0].clientY-ty};}}
+ function wheel(e){e.preventDefault();zoomAt(e.clientX,e.clientY,e.deltaY<0?1.15:1/1.15);}
+ function md(e){if(e.target.closest('#lbBar'))return;e.preventDefault();mdrag={x:e.clientX-tx,y:e.clientY-ty};}
+ function mm(e){if(!mdrag)return;tx=e.clientX-mdrag.x;ty=e.clientY-mdrag.y;clamp();apply();}
+ function mu(){mdrag=null;}
+ function open(src){ensure();lb.classList.add('open');var hint=lb.querySelector('#lbHint');hint.style.opacity='1';clearTimeout(hintT);hintT=setTimeout(function(){hint.style.opacity='0';},2600);if(img.getAttribute('src')===src&&img.complete&&img.naturalWidth){natW=img.naturalWidth;natH=img.naturalHeight;fit();}else{img.src=src;if(img.complete&&img.naturalWidth){natW=img.naturalWidth;natH=img.naturalHeight;fit();}}}
+ function close(){if(lb)lb.classList.remove('open');}
+ window.lbOpen=open;
+ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+})();
 </script>
 </body>
 </html>

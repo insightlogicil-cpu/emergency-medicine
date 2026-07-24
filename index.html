@@ -321,7 +321,7 @@ function showTab(t){
  } else if(t==='txt'){
   b.innerHTML=`<div class="txtpane">${protoHasFlow(cur)?schemaBanner():''}${escapeHtml(cur.text)}${notes[key(cur)]?`<div class="note" style="margin:16px 0 0">📌 ${escapeHtml(notes[key(cur)])}</div>`:''}</div>`;
  } else {
-  b.innerHTML=`<div class="dqpane"><div class="note" style="margin:0 0 12px">שאל שאלת עומק — התשובה מוצגת מתוך טקסט המקור בלבד.</div><div class="dqbar"><input id="dqIn" placeholder="שאלה על ${cur.title}…"><button class="mic" id="dqMic" onclick="toggleMic('dqIn',runDQ)">🎤</button></div><div id="dqRes"></div></div>`;
+  b.innerHTML=`<div class="dqpane"><div class="note" style="margin:0 0 12px">שאל שאלת עומק — התשובה מוצגת מתוך טקסט המקור בלבד.</div><div class="dqbar"><input id="dqIn" placeholder="שאלה על ${cur.title}…"><button class="mic" id="dqMic" onclick="toggleMic('dqIn',runDQ)">🎤</button><button class="mic" onclick="runDQ()" style="width:auto;padding:0 16px;background:var(--accent);color:#fff;font-weight:800;font-size:15px">שאל</button></div><div id="dqRes"></div></div>`;
   const inp=document.getElementById('dqIn');inp.addEventListener('keydown',e=>{if(e.key==='Enter')runDQ();});
  }
  b.scrollTop=0;
